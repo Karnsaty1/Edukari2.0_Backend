@@ -13,6 +13,9 @@ import {
   recordLiveAttendance,
   sendLiveReaction,
   searchRoomMessages,
+  getRoomParticipantCounts,
+  searchLiveRoomLogs,
+  getLiveRoomLogDetail,
 } from "./live.service";
 
 function asParamValue(value: string | string[] | undefined): string {
@@ -62,8 +65,10 @@ function getAuthedUserId(req: Request): ObjectId {
 
 async function create(req: Request, res: Response, next: NextFunction) {
   try {
+    const user = getAuthedUser(req);
     const userId = getAuthedUserId(req);
-    const result = await createLiveRoom(req.body || {}, userId);
+    const displayName = req.body?.displayName || user.firstname || user.email || "Host";
+    const result = await createLiveRoom({ ...req.body, displayName }, userId);
     res.status(201).json(result);
   } catch (error) {
     next(error);
@@ -188,6 +193,35 @@ async function messages(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+async function participantCounts(req: Request, res: Response, next: NextFunction) {
+  try {
+    const roomId = parseObjectId(req.params.roomId, "roomId");
+    const result = await getRoomParticipantCounts(roomId);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function roomLogs(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await searchLiveRoomLogs(req.body || {});
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function roomLogDetail(req: Request, res: Response, next: NextFunction) {
+  try {
+    const roomId = parseObjectId(req.params.roomId, "roomId");
+    const result = await getLiveRoomLogDetail(roomId);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export {
   create,
   search,
@@ -200,4 +234,7 @@ export {
   attendance,
   reaction,
   messages,
+  participantCounts,
+  roomLogs,
+  roomLogDetail,
 };

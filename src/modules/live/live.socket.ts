@@ -2,24 +2,19 @@ import type { Server as HttpServer } from "node:http";
 import { Server, type Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import { ObjectId } from "mongodb";
+import type { JwtUser } from "../auth/auth.utils";
 import {
   joinLiveRoom,
   leaveLiveRoom,
   sendLiveMessage,
   recordLiveAttendance,
   sendLiveReaction,
+  getRoomParticipantCounts,
 } from "./live.service";
-
-interface SocketUser {
-  sub: string;
-  email?: string;
-  firstname?: string;
-  role?: string;
-}
 
 let io: Server | null = null;
 
-function verifySocketToken(token?: string): SocketUser | null {
+function verifySocketToken(token?: string): JwtUser | null {
   if (!token) {
     return null;
   }
@@ -30,7 +25,7 @@ function verifySocketToken(token?: string): SocketUser | null {
   }
 
   try {
-    const payload = jwt.verify(token, secret) as SocketUser & { tokenType?: string };
+    const payload = jwt.verify(token, secret) as JwtUser;
     if (payload.tokenType !== "access" || !payload.sub) {
       return null;
     }
@@ -41,8 +36,8 @@ function verifySocketToken(token?: string): SocketUser | null {
   }
 }
 
-function getUserFromSocket(socket: Socket): SocketUser {
-  const user = socket.data.user as SocketUser | undefined;
+function getUserFromSocket(socket: Socket): JwtUser {
+  const user = socket.data.user as JwtUser | undefined;
 
   if (!user?.sub) {
     throw new Error("Unauthorized socket");
@@ -99,6 +94,8 @@ function initLiveSockets(server: HttpServer): Server {
 
         socket.join(roomKey);
         io?.to(roomKey).emit("participant:joined", result);
+        const counts = await getRoomParticipantCounts(new ObjectId(roomId));
+        io?.to(roomKey).emit("participant:counts", counts);
       });
     });
 
@@ -109,6 +106,8 @@ function initLiveSockets(server: HttpServer): Server {
         const result = await leaveLiveRoom(new ObjectId(roomId), new ObjectId(user.sub));
         socket.leave(roomKey);
         io?.to(roomKey).emit("participant:left", result);
+        const counts = await getRoomParticipantCounts(new ObjectId(roomId));
+        io?.to(roomKey).emit("participant:counts", counts);
       });
     });
 

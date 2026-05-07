@@ -5,6 +5,7 @@ import courseRoutes from "./modules/courses/course.routes";
 import bookRoutes from "./modules/books/book.routes";
 import progressRoutes from "./modules/progress/progress.routes";
 import liveRoutes from "./modules/live/live.routes";
+import { globalRateLimiter } from "./middlewares/rateLimiter";
 
 function createApp() {
   const app = express();
@@ -16,6 +17,7 @@ function createApp() {
     })
   );
   app.use(express.json());
+  app.use(globalRateLimiter);
 
   app.get("/health", (req: Request, res: Response) => {
     res.json({ ok: true, message: "API is running" });
@@ -26,7 +28,7 @@ function createApp() {
   app.use("/courses", courseRoutes);
   app.use("/books", bookRoutes);
   app.use("/progress", progressRoutes);
-  app.use("/live", liveRoutes);
+  app.use("/api/live", liveRoutes);
 
   app.use((req: Request, res: Response) => {
     res.status(404).json({ message: "Route not found" });

@@ -13,6 +13,14 @@ interface TokenUserLike {
   role?: string;
 }
 
+export interface JwtUser {
+  sub: string;
+  email: string;
+  firstname: string;
+  role: string;
+  tokenType?: string;
+}
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;

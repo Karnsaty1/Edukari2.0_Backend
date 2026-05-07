@@ -6,4 +6,5 @@ export interface CreateLiveRoomCommand {
   maxAttendees?: number | null;
   isPublic?: boolean | null;
   slug?: string | null;
+  displayName?: string | null;
 }

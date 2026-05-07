@@ -10,97 +10,37 @@ import {
   LiveRoomCollection,
   LiveSessionCollection,
   type LiveParticipantRole,
-  type LiveRoomStatus,
-  type LiveMessageKind,
-  type LiveReactionType,
+  type LiveRoom,
+  type LiveSession,
+  type LiveParticipant,
+  type LiveMessage,
+  type LiveAttendance,
+  type LiveReaction,
 } from "../../contracts/Live/Dtos/live";
 import type { CreateLiveRoomCommand } from "../../contracts/Live/Commands/createLiveRoomCommand";
+import type { SearchLiveRoomLogsCommand } from "../../contracts/Live/Commands/searchLiveRoomLogsCommand";
 import type { SearchLiveRoomsCommand } from "../../contracts/Live/Commands/searchLiveRoomsCommand";
 import type { DetailLiveRoomCommand } from "../../contracts/Live/Commands/detailLiveRoomCommand";
-import type { JoinLiveRoomCommand } from "../../contracts/Live/Commands/joinLiveRoomCommand";
 import type { SendLiveMessageCommand } from "../../contracts/Live/Commands/sendLiveMessageCommand";
 import type { RecordLiveAttendanceCommand } from "../../contracts/Live/Commands/recordLiveAttendanceCommand";
 import type { SendLiveReactionCommand } from "../../contracts/Live/Commands/sendLiveReactionCommand";
 
-interface LiveRoomDocument {
+type OmitStringIds<T> = Omit<T, "id" | "roomId" | "userId" | "hostUserId" | "courseId">;
+
+type MongoDoc<T extends OmitStringIds<T>> = OmitStringIds<T> & {
   _id?: ObjectId;
-  title: string;
-  slug: string;
-  description?: string;
+  roomId?: ObjectId;
+  userId?: ObjectId;
+  hostUserId?: ObjectId;
   courseId?: ObjectId | null;
-  hostUserId: ObjectId;
-  status: LiveRoomStatus;
-  provider: "livekit";
-  providerRoomName: string;
-  scheduledStartAt?: Date | null;
-  startedAt?: Date | null;
-  endedAt?: Date | null;
-  maxAttendees?: number | null;
-  isPublic?: boolean;
-  createdAt?: Date | null;
-  updatedAt?: Date | null;
-}
+};
 
-interface LiveSessionDocument {
-  _id?: ObjectId;
-  roomId: ObjectId;
-  provider: "livekit";
-  providerRoomName: string;
-  status: "live" | "ended";
-  startedAt?: Date | null;
-  endedAt?: Date | null;
-  createdAt?: Date | null;
-  updatedAt?: Date | null;
-}
-
-interface LiveParticipantDocument {
-  _id?: ObjectId;
-  roomId: ObjectId;
-  userId: ObjectId;
-  role: LiveParticipantRole;
-  displayName: string;
-  isActive: boolean;
-  joinedAt?: Date | null;
-  leftAt?: Date | null;
-  lastSeenAt?: Date | null;
-  createdAt?: Date | null;
-  updatedAt?: Date | null;
-}
-
-interface LiveMessageDocument {
-  _id?: ObjectId;
-  roomId: ObjectId;
-  userId: ObjectId;
-  displayName: string;
-  kind: LiveMessageKind;
-  text: string;
-  createdAt?: Date | null;
-  updatedAt?: Date | null;
-}
-
-interface LiveAttendanceDocument {
-  _id?: ObjectId;
-  roomId: ObjectId;
-  userId: ObjectId;
-  displayName: string;
-  watchSeconds: number;
-  isPresent: boolean;
-  joinedAt?: Date | null;
-  leftAt?: Date | null;
-  lastHeartbeatAt?: Date | null;
-  createdAt?: Date | null;
-  updatedAt?: Date | null;
-}
-
-interface LiveReactionDocument {
-  _id?: ObjectId;
-  roomId: ObjectId;
-  userId: ObjectId;
-  displayName: string;
-  type: LiveReactionType;
-  createdAt?: Date | null;
-  updatedAt?: Date | null;
-}
+type LiveRoomDocument = MongoDoc<LiveRoom>;
+type LiveSessionDocument = MongoDoc<LiveSession>;
+type LiveParticipantDocument = MongoDoc<LiveParticipant>;
+type LiveMessageDocument = MongoDoc<LiveMessage>;
+type LiveAttendanceDocument = MongoDoc<LiveAttendance>;
+type LiveReactionDocument = MongoDoc<LiveReaction>;
 
 type LiveRoomSummary = ReturnType<typeof sanitizeLiveRoom>;
 
@@ -233,6 +173,8 @@ function buildRoomQuery(filters: SearchLiveRoomsCommand) {
 
   if (status) {
     query.status = status;
+  } else {
+    query.status = { $ne: "ended" };
   }
 
   if (courseId) {
@@ -311,6 +253,8 @@ async function createLiveRoom(
       statusCode: 500,
     });
   }
+
+  await joinLiveRoom(result.insertedId, hostUserId, normalizeText(command.displayName) || "Host", "host");
 
   return sanitizeLiveRoom(room);
 }
@@ -404,7 +348,7 @@ async function startLiveSession(roomId: ObjectId, userId: ObjectId, displayName:
     throw error;
   }
 
-  if (room.hostUserId.toString() !== userId.toString()) {
+  if (room.hostUserId && room.hostUserId.toString() !== userId.toString()) {
     const error = new Error("Only the host can start a live session");
     (error as Error & { statusCode?: number }).statusCode = 403;
     throw error;
@@ -416,7 +360,7 @@ async function startLiveSession(roomId: ObjectId, userId: ObjectId, displayName:
     { _id: roomId },
     {
       $set: {
-        status: "live" as LiveRoomStatus,
+        status: "live" as LiveRoom["status"],
         startedAt: room.startedAt || now,
         endedAt: null,
         updatedAt: now,
@@ -470,7 +414,7 @@ async function endLiveSession(roomId: ObjectId, userId: ObjectId) {
     throw error;
   }
 
-  if (room.hostUserId.toString() !== userId.toString()) {
+  if (room.hostUserId && room.hostUserId.toString() !== userId.toString()) {
     const error = new Error("Only the host can end a live session");
     (error as Error & { statusCode?: number }).statusCode = 403;
     throw error;
@@ -481,7 +425,7 @@ async function endLiveSession(roomId: ObjectId, userId: ObjectId) {
     { _id: roomId },
     {
       $set: {
-        status: "ended" as LiveRoomStatus,
+        status: "ended" as LiveRoom["status"],
         endedAt: now,
         updatedAt: now,
       },
@@ -532,11 +476,12 @@ async function joinLiveRoom(
     throw error;
   }
 
+  const resolvedRole: LiveParticipantRole = room.hostUserId?.toString() === userId.toString() ? "host" : role;
   const now = new Date();
   const participantDocument: Partial<LiveParticipantDocument> = {
     roomId,
     userId,
-    role,
+    role: resolvedRole,
     displayName,
     isActive: true,
     joinedAt: now,
@@ -582,7 +527,7 @@ async function joinLiveRoom(
     roomName: room.providerRoomName,
     userId: userId.toString(),
     displayName,
-    role,
+    role: resolvedRole,
   });
 
   return {
@@ -590,7 +535,7 @@ async function joinLiveRoom(
     session: session ? sanitizeLiveSession(session) : null,
     token,
     livekitUrl: getLiveKitUrl() || null,
-    role,
+    role: resolvedRole,
   };
 }
 
@@ -726,7 +671,7 @@ async function sendLiveReaction(
     roomId,
     userId,
     displayName,
-    type: command.type as LiveReactionType,
+    type: command.type as LiveReaction["type"],
     createdAt: now,
     updatedAt: now,
   };
@@ -741,6 +686,121 @@ async function sendLiveReaction(
   }
 
   return sanitizeLiveReaction(reaction);
+}
+
+async function searchLiveRoomLogs(command: SearchLiveRoomLogsCommand) {
+  const rooms = getCollection<LiveRoomDocument>(LiveRoomCollection);
+  const participants = getCollection<LiveParticipantDocument>(LiveParticipantCollection);
+  const messages = getCollection<LiveMessageDocument>(LiveMessageCollection);
+  const attendance = getCollection<LiveAttendanceDocument>(LiveAttendanceCollection);
+
+  const safePage = Math.max(1, Math.floor(Number(command.page || 1)));
+  const safePageSize = Math.max(1, Math.min(50, Math.floor(Number(command.pageSize || 10))));
+  const skip = (safePage - 1) * safePageSize;
+  const query = buildRoomQuery(command);
+
+  if (command.from || command.to) {
+    const dateFilter: Record<string, Date> = {};
+    if (command.from) dateFilter.$gte = new Date(command.from);
+    if (command.to) dateFilter.$lte = new Date(command.to);
+    query.createdAt = dateFilter;
+  }
+
+  const [items, total] = await Promise.all([
+    rooms.find(query).sort({ createdAt: -1 }).skip(skip).limit(safePageSize).toArray(),
+    rooms.countDocuments(query),
+  ]);
+
+  const logs = await Promise.all(
+    items.map(async (room) => {
+      const roomId = room._id as ObjectId;
+      const [totalParticipants, totalMessages, totalAttendance] = await Promise.all([
+        participants.countDocuments({ roomId }),
+        messages.countDocuments({ roomId }),
+        attendance.countDocuments({ roomId }),
+      ]);
+      return {
+        ...sanitizeLiveRoom(room),
+        totalParticipants,
+        totalMessages,
+        totalAttendance,
+      };
+    })
+  );
+
+  return {
+    items: logs,
+    meta: {
+      page: safePage,
+      pageSize: safePageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / safePageSize)),
+      hasNext: skip + safePageSize < total,
+      hasPrev: safePage > 1,
+    },
+  };
+}
+
+async function getLiveRoomLogDetail(roomId: ObjectId) {
+  const rooms = getCollection<LiveRoomDocument>(LiveRoomCollection);
+  const sessions = getCollection<LiveSessionDocument>(LiveSessionCollection);
+  const participants = getCollection<LiveParticipantDocument>(LiveParticipantCollection);
+  const messages = getCollection<LiveMessageDocument>(LiveMessageCollection);
+  const attendance = getCollection<LiveAttendanceDocument>(LiveAttendanceCollection);
+
+  const room = await rooms.findOne({ _id: roomId });
+  if (!room) {
+    const error = new Error("Live room not found");
+    (error as Error & { statusCode?: number }).statusCode = 404;
+    throw error;
+  }
+
+  const [allSessions, allParticipants, recentMessages, recentAttendance, counts] =
+    await Promise.all([
+      sessions.find({ roomId }).sort({ createdAt: -1 }).toArray(),
+      participants.find({ roomId }).sort({ joinedAt: -1 }).toArray(),
+      messages.find({ roomId }).sort({ createdAt: -1 }).limit(50).toArray(),
+      attendance.find({ roomId }).sort({ updatedAt: -1 }).toArray(),
+      Promise.all([
+        sessions.countDocuments({ roomId }),
+        participants.countDocuments({ roomId }),
+        messages.countDocuments({ roomId }),
+        attendance.countDocuments({ roomId }),
+      ]),
+    ]);
+
+  const [sessionCount, participantCount, messageCount, attendanceCount] = counts;
+
+  return {
+    room: {
+      ...sanitizeLiveRoom(room),
+      totalParticipants: participantCount,
+      totalMessages: messageCount,
+      totalAttendance: attendanceCount,
+    },
+    sessions: allSessions.map(sanitizeLiveSession),
+    participants: allParticipants.map(sanitizeLiveParticipant),
+    recentMessages: recentMessages.map(sanitizeLiveMessage),
+    recentAttendance: recentAttendance.map(sanitizeLiveAttendance),
+    counts: {
+      sessions: sessionCount,
+      participants: participantCount,
+      messages: messageCount,
+      attendance: attendanceCount,
+    },
+  };
+}
+
+async function getRoomParticipantCounts(roomId: ObjectId) {
+  const participants = getCollection<LiveParticipantDocument>(LiveParticipantCollection);
+
+  const [total, active, left] = await Promise.all([
+    participants.countDocuments({ roomId }),
+    participants.countDocuments({ roomId, isActive: true }),
+    participants.countDocuments({ roomId, isActive: false }),
+  ]);
+
+  return { total, active, left };
 }
 
 async function getLatestLiveSession(roomId: ObjectId) {
@@ -786,6 +846,9 @@ export {
   sendLiveReaction,
   getLatestLiveSession,
   searchRoomMessages,
+  getRoomParticipantCounts,
+  searchLiveRoomLogs,
+  getLiveRoomLogDetail,
   sanitizeLiveRoom,
   sanitizeLiveSession,
   sanitizeLiveParticipant,
