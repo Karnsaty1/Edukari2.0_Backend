@@ -1,10 +1,10 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import type { Request } from "express";
 
-type AuthedRequest = typeof import("express").request & { user?: { sub?: string } };
-
-function keyGenerator(req: AuthedRequest): string {
-  const user = (req as unknown as { user?: { sub?: string } }).user;
-  return user?.sub || ipKeyGenerator(req);
+function keyGenerator(req: Request): string {
+  const user = (req as Request & { user?: { sub?: string } }).user;
+  if (user?.sub) return user.sub;
+  return ipKeyGenerator(req as unknown as Parameters<typeof ipKeyGenerator>[0]);
 }
 
 // 20 hits per minute per user — applied globally
