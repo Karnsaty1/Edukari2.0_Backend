@@ -20,6 +20,24 @@ function createApp() {
   app.use(express.json());
   app.use(globalRateLimiter);
 
+  app.get("/", (req: Request, res: Response) => {
+    res.json({
+      name: "Edukari API",
+      version: "2.0",
+      status: "running",
+      timestamp: new Date().toISOString(),
+      endpoints: {
+        auth: "/api/auth",
+        live: "/api/live",
+        jobs: "/api/jobs",
+        courses: "/courses",
+        books: "/books",
+        progress: "/progress",
+        health: "/health",
+      },
+    });
+  });
+
   app.get("/health", (req: Request, res: Response) => {
     res.json({ ok: true, message: "API is running" });
   });
