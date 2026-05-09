@@ -45,11 +45,13 @@ async function upsertUserCourseProgress(
     attempts,
   });
 
+  const { createdAt: _ignore, ...recordWithoutCreatedAt } = record as CourseProgressDocument & { createdAt?: Date };
+
   await progress.updateOne(
     { userId, courseId },
     {
       $set: {
-        ...record,
+        ...recordWithoutCreatedAt,
         updatedAt: now,
       },
       $setOnInsert: {

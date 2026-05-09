@@ -5,6 +5,7 @@ import courseRoutes from "./modules/courses/course.routes";
 import bookRoutes from "./modules/books/book.routes";
 import progressRoutes from "./modules/progress/progress.routes";
 import liveRoutes from "./modules/live/live.routes";
+import jobRoutes from "./modules/jobs/jobs.routes";
 import { globalRateLimiter } from "./middlewares/rateLimiter";
 
 function createApp() {
@@ -29,6 +30,8 @@ function createApp() {
   app.use("/books", bookRoutes);
   app.use("/progress", progressRoutes);
   app.use("/api/live", liveRoutes);
+  app.use("/api/jobs", jobRoutes);
+  app.use("/jobs", jobRoutes);
 
   app.use((req: Request, res: Response) => {
     res.status(404).json({ message: "Route not found" });

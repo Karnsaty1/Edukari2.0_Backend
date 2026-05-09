@@ -477,6 +477,14 @@ async function joinLiveRoom(
   }
 
   const resolvedRole: LiveParticipantRole = room.hostUserId?.toString() === userId.toString() ? "host" : role;
+
+  if (room.status === "ended") {
+    throw Object.assign(new Error("This live room has ended"), { statusCode: 410 });
+  }
+
+  if (room.status === "draft" && resolvedRole !== "host") {
+    throw Object.assign(new Error("This room is not open yet"), { statusCode: 403 });
+  }
   const now = new Date();
   const participantDocument: Partial<LiveParticipantDocument> = {
     roomId,

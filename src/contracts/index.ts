@@ -5,3 +5,4 @@ export * as CourseQuiz from "./CourseQuiz";
 export * as Book from "./Book";
 export * as Pagination from "./Pagination";
 export * as Live from "./Live";
+export * as Jobs from "./Jobs";
