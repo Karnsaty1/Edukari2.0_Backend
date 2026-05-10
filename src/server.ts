@@ -1,8 +1,8 @@
 import dotenv from "dotenv";
 import http from "node:http";
-import { connectDB } from "./src/config/db";
-import { createApp } from "./src/app";
-import { initLiveSockets } from "./src/modules/live/live.socket";
+import { connectDB } from "./config/db";
+import { createApp } from "./app";
+import { initLiveSockets } from "./modules/live/live.socket";
 
 dotenv.config();
 
