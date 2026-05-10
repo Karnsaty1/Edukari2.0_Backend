@@ -1,6 +1,7 @@
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { findOrCreateUser, createTokens } from "./auth.service";
+import { findOrCreateUser } from "./auth.service";
+import { createTokens } from "./auth.utils";
 import type { ObjectId } from "mongodb";
 
 passport.serializeUser((user: { _id?: ObjectId; id?: string }, done) => {

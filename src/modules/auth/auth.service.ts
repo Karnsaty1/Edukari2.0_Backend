@@ -357,4 +357,5 @@ export {
   registerLocalUser,
   refreshAuthTokens,
   getCurrentUserDetails,
+  findOrCreateUser,
 };
