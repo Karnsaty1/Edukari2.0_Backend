@@ -13,7 +13,19 @@ function createApp() {
 
   app.use(
     cors({
-      origin: process.env.CLIENT_ORIGIN ,
+      origin: function (origin, callback) {
+        const clientOrigin = process.env.CLIENT_ORIGIN;
+        const vercelPattern = /^https:\/\/edukari2-0-frontend.*\.vercel\.app\/?$/;
+        if (
+          !origin ||
+          origin === clientOrigin ||
+          vercelPattern.test(origin)
+        ) {
+          callback(null, true);
+        } else {
+          callback(new Error("Not allowed by CORS"));
+        }
+      },
       credentials: true,
     })
   );
