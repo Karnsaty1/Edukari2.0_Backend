@@ -6,6 +6,7 @@ import {
   type SignOptions,
 } from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import type { ObjectId } from "mongodb";
 
 interface TokenUserLike {
   _id: { toString(): string } | string;
@@ -183,3 +184,11 @@ export {
   hashPassword,
   comparePassword,
 };
+
+export function createTokens(userId: ObjectId) {
+  return buildTokenPair({
+    _id: userId,
+    email: "",
+    role: "user",
+  });
+}

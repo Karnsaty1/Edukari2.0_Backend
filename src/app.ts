@@ -1,5 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import session from "express-session";
+import passport from "passport";
 import authRoutes from "./modules/auth/auth.routes";
 import courseRoutes from "./modules/courses/course.routes";
 import bookRoutes from "./modules/books/book.routes";
@@ -29,6 +31,21 @@ function createApp() {
       credentials: true,
     })
   );
+
+  app.use(
+    session({
+      secret: process.env.JWT_ACCESS_SECRET!,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      },
+    })
+  );
+
+  app.use(passport.initialize());
+  app.use(passport.session());
   app.use(express.json());
   app.use(globalRateLimiter);
 

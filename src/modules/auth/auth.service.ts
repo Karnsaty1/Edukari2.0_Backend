@@ -240,6 +240,72 @@ async function getCurrentUserDetails(userId: ObjectId) {
   };
 }
 
+async function findOrCreateUser({
+  email,
+  name,
+  googleId,
+  avatar,
+}: {
+  email: string;
+  name?: string;
+  googleId: string;
+  avatar?: string;
+}) {
+  const users = getCollection<UserDocument>("users");
+  const normalizedEmail = normalizeEmail(email);
+  const firstName = getEmailFirstname(normalizedEmail);
+
+  let user = await users.findOne({ email: normalizedEmail });
+
+  if (!user) {
+    const insertResult = await users.insertOne({
+      name: name || firstName || "Google User",
+      firstname: firstName,
+      email: normalizedEmail,
+      authProvider: "google",
+      googleId,
+      avatarUrl: avatar || "",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Omit<UserDocument, "_id">);
+
+    user = (await users.findOne({ _id: insertResult.insertedId })) as UserRecord | null;
+  } else {
+    const update: Partial<UserDocument> = {
+      authProvider: user.authProvider || "google",
+      googleId: user.googleId || googleId,
+      updatedAt: new Date(),
+    };
+
+    if (!user.name && name) {
+      update.name = name;
+    }
+
+    if (!user.firstname) {
+      update.firstname = firstName;
+    }
+
+    if (!user.avatarUrl && avatar) {
+      update.avatarUrl = avatar;
+    }
+
+    await users.updateOne({ _id: user._id }, { $set: update });
+    user = (await users.findOne({ _id: user._id })) as UserRecord | null;
+  }
+
+  if (!user) {
+    throw new Error("Unable to create/find user");
+  }
+
+  await upsertUserDetail({
+    ...user,
+    firstname: user.firstname || firstName,
+    lastname: user.lastname || "",
+  });
+
+  return user as UserRecord;
+}
+
 async function upsertUserDetail(user: UserRecord) {
   const details = getCollection(UserDetailCollection);
   const now = new Date();
