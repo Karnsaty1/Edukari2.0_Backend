@@ -18,13 +18,6 @@ function getIO(): Server | null {
   return io;
 }
 
-export function emitRoomEnded(roomId: string) {
-  if (!io) return;
-  const roomKey = `live:${roomId}`;
-  io.to(roomKey).emit("room:ended", { roomId, message: "The live session has ended" });
-  io.to(roomKey).emit("participant:counts", { total: 0, active: 0, left: 0 });
-}
-
 function verifySocketToken(token?: string): JwtUser | null {
   if (!token) {
     return null;
@@ -166,6 +159,13 @@ function initLiveSockets(server: HttpServer): Server {
   });
 
   return io;
+}
+
+function emitRoomEnded(roomId: string) {
+  if (!io) return;
+  const roomKey = `live:${roomId}`;
+  io.to(roomKey).emit("room:ended", { roomId, message: "The live session has ended" });
+  io.to(roomKey).emit("participant:counts", { total: 0, active: 0, left: 0 });
 }
 
 export { initLiveSockets, getIO, emitRoomEnded };
