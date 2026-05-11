@@ -16,6 +16,7 @@ import {
   participantCounts,
   roomLogs,
   roomLogDetail,
+  detailBySlug,
 } from "./live.controller";
 
 const router = Router();
@@ -23,6 +24,7 @@ const router = Router();
 router.post("/rooms", authenticateToken, create);
 router.post("/rooms/search", search);
 router.post("/rooms/detail", detail);
+router.get("/rooms/slug/:slug", detailBySlug);
 router.post("/rooms/:roomId/go-live", authenticateToken, strictRateLimiter, goLive);
 router.post("/rooms/:roomId/end-live", authenticateToken, endLive);
 router.post("/rooms/:roomId/join", authenticateToken, strictRateLimiter, join);

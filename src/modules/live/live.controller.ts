@@ -222,6 +222,19 @@ async function roomLogDetail(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+async function detailBySlug(req: Request, res: Response, next: NextFunction) {
+  try {
+    const slug = req.params.slug;
+    if (!slug) {
+      throw Object.assign(new Error("slug is required"), { statusCode: 400 });
+    }
+    const result = await getLiveRoomDetail({ slug });
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
 export {
   create,
   search,
@@ -237,4 +250,5 @@ export {
   participantCounts,
   roomLogs,
   roomLogDetail,
+  detailBySlug,
 };
