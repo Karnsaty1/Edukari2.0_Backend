@@ -224,7 +224,7 @@ async function roomLogDetail(req: Request, res: Response, next: NextFunction) {
 
 async function detailBySlug(req: Request, res: Response, next: NextFunction) {
   try {
-    const slug = req.params.slug;
+    const slug = asParamValue(req.params.slug);
     if (!slug) {
       throw Object.assign(new Error("slug is required"), { statusCode: 400 });
     }
