@@ -259,12 +259,23 @@ async function createLiveRoom(
   return sanitizeLiveRoom(room);
 }
 
-async function searchLiveRooms(command: SearchLiveRoomsCommand) {
+async function searchLiveRooms(command: SearchLiveRoomsCommand, userId?: ObjectId) {
   const rooms = getCollection<LiveRoomDocument>(LiveRoomCollection);
   const safePage = Math.max(1, Math.floor(Number(command.page || 1)));
   const safePageSize = Math.max(1, Math.min(50, Math.floor(Number(command.pageSize || 8))));
   const skip = (safePage - 1) * safePageSize;
   const query = buildRoomQuery(command);
+
+  // If userId is provided, exclude draft rooms unless user is the host
+  if (userId) {
+    query.$or = [
+      { status: { $ne: "draft" } },
+      { hostUserId: userId },
+    ];
+  } else {
+    // If no user, exclude draft rooms entirely
+    query.status = { $ne: "draft" };
+  }
 
   const [items, total] = await Promise.all([
     rooms.find(query).sort({ createdAt: -1 }).skip(skip).limit(safePageSize).toArray(),
@@ -284,7 +295,7 @@ async function searchLiveRooms(command: SearchLiveRoomsCommand) {
   };
 }
 
-async function getLiveRoomDetail(command: DetailLiveRoomCommand) {
+async function getLiveRoomDetail(command: DetailLiveRoomCommand, userId?: ObjectId) {
   const rooms = getCollection<LiveRoomDocument>(LiveRoomCollection);
   const sessions = getCollection<LiveSessionDocument>(LiveSessionCollection);
   const participants = getCollection<LiveParticipantDocument>(LiveParticipantCollection);
@@ -301,6 +312,13 @@ async function getLiveRoomDetail(command: DetailLiveRoomCommand) {
   }
 
   if (!room) {
+    const error = new Error("Live room not found");
+    (error as Error & { statusCode?: number }).statusCode = 404;
+    throw error;
+  }
+
+  // Check if room is draft and user is not the host
+  if (room.status === "draft" && (!userId || room.hostUserId?.toString() !== userId.toString())) {
     const error = new Error("Live room not found");
     (error as Error & { statusCode?: number }).statusCode = 404;
     throw error;

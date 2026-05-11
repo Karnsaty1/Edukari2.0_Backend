@@ -17,6 +17,7 @@ import {
   searchLiveRoomLogs,
   getLiveRoomLogDetail,
 } from "./live.service";
+import { emitRoomEnded } from "./live.socket";
 
 function asParamValue(value: string | string[] | undefined): string {
   if (Array.isArray(value)) {
@@ -77,7 +78,8 @@ async function create(req: Request, res: Response, next: NextFunction) {
 
 async function search(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await searchLiveRooms(req.body || {});
+    const userId = getAuthedUserId(req);
+    const result = await searchLiveRooms(req.body || {}, userId);
     res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -111,6 +113,10 @@ async function endLive(req: Request, res: Response, next: NextFunction) {
     const userId = getAuthedUserId(req);
     const roomId = parseObjectId(req.params.roomId || req.body?.roomId, "roomId");
     const result = await endLiveSession(roomId, userId);
+    
+    // Notify all participants that the room has ended
+    emitRoomEnded(roomId.toString());
+    
     res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -228,7 +234,16 @@ async function detailBySlug(req: Request, res: Response, next: NextFunction) {
     if (!slug) {
       throw Object.assign(new Error("slug is required"), { statusCode: 400 });
     }
-    const result = await getLiveRoomDetail({ slug });
+    
+    // Try to get userId (optional - draft rooms only visible to host)
+    let userId: ObjectId | undefined;
+    try {
+      userId = getAuthedUserId(req);
+    } catch {
+      // User not logged in - will only see non-draft rooms
+    }
+    
+    const result = await getLiveRoomDetail({ slug }, userId);
     res.status(200).json(result);
   } catch (error) {
     next(error);
