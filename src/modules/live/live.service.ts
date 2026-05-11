@@ -10,6 +10,7 @@ import {
   LiveRoomCollection,
   LiveSessionCollection,
   type LiveParticipantRole,
+  type LiveRoomStatus,
   type LiveRoom,
   type LiveSession,
   type LiveParticipant,
@@ -157,45 +158,45 @@ function sanitizeLiveReaction(reaction: LiveReactionDocument) {
 }
 
 function buildRoomQuery(filters: SearchLiveRoomsCommand) {
-  const query: Record<string, unknown> = {};
+  const clauses: Record<string, unknown>[] = [];
   const q = normalizeText(filters.q);
   const status = normalizeText(filters.status);
   const courseId = normalizeText(filters.courseId);
   const hostUserId = normalizeText(filters.hostUserId);
 
   if (q) {
-    query.$or = [
+    clauses.push({
+      $or: [
       { title: { $regex: escapeRegex(q), $options: "i" } },
       { slug: { $regex: escapeRegex(q), $options: "i" } },
       { description: { $regex: escapeRegex(q), $options: "i" } },
-    ];
+      ],
+    });
   }
 
   if (status) {
-    query.status = status;
-  } else {
-    query.status = { $ne: "ended" };
+    clauses.push({ status });
   }
 
   if (courseId) {
     const objectId = toObjectId(courseId);
     if (objectId) {
-      query.courseId = objectId;
+      clauses.push({ courseId: objectId });
     }
   }
 
   if (hostUserId) {
     const objectId = toObjectId(hostUserId);
     if (objectId) {
-      query.hostUserId = objectId;
+      clauses.push({ hostUserId: objectId });
     }
   }
 
   if (typeof filters.isPublic === "boolean") {
-    query.isPublic = filters.isPublic;
+    clauses.push({ isPublic: filters.isPublic });
   }
 
-  return query;
+  return clauses.length === 0 ? {} : clauses.length === 1 ? clauses[0] : { $and: clauses };
 }
 
 function createSlug(title: string): string {
@@ -265,21 +266,17 @@ async function searchLiveRooms(command: SearchLiveRoomsCommand, userId?: ObjectI
   const safePageSize = Math.max(1, Math.min(50, Math.floor(Number(command.pageSize || 8))));
   const skip = (safePage - 1) * safePageSize;
   const query = buildRoomQuery(command);
-
-  // If userId is provided, exclude draft rooms unless user is the host
-  if (userId) {
-    query.$or = [
-      { status: { $ne: "draft" } },
-      { hostUserId: userId },
-    ];
-  } else {
-    // If no user, exclude draft rooms entirely
-    query.status = { $ne: "draft" };
-  }
+  const visibilityClause = userId
+    ? {
+        $or: [{ status: "live" as LiveRoomStatus }, { hostUserId: userId }],
+      }
+    : { status: "live" };
+  const finalQuery: any =
+    Object.keys(query).length === 0 ? visibilityClause : { $and: [query, visibilityClause] };
 
   const [items, total] = await Promise.all([
-    rooms.find(query).sort({ createdAt: -1 }).skip(skip).limit(safePageSize).toArray(),
-    rooms.countDocuments(query),
+    rooms.find(finalQuery).sort({ createdAt: -1 }).skip(skip).limit(safePageSize).toArray(),
+    rooms.countDocuments(finalQuery),
   ]);
 
   return {
@@ -317,8 +314,9 @@ async function getLiveRoomDetail(command: DetailLiveRoomCommand, userId?: Object
     throw error;
   }
 
-  // Check if room is draft and user is not the host
-  if (room.status === "draft" && (!userId || room.hostUserId?.toString() !== userId.toString())) {
+  const isHost = userId && room.hostUserId?.toString() === userId.toString();
+
+  if (room.status !== "live" && !isHost) {
     const error = new Error("Live room not found");
     (error as Error & { statusCode?: number }).statusCode = 404;
     throw error;
@@ -500,7 +498,7 @@ async function joinLiveRoom(
     throw Object.assign(new Error("This live room has ended"), { statusCode: 410 });
   }
 
-  if (room.status === "draft" && resolvedRole !== "host") {
+  if (room.status !== "live" && resolvedRole !== "host") {
     throw Object.assign(new Error("This room is not open yet"), { statusCode: 403 });
   }
   const now = new Date();
