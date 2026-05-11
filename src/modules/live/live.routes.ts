@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { ObjectId } from "mongodb";
+import { getCollection } from "../../config/db";
 import { authenticateToken } from "../auth/auth.middleware";
 import { strictRateLimiter } from "../../middlewares/rateLimiter";
 import {
@@ -36,5 +38,15 @@ router.post("/rooms/:roomId/reactions", authenticateToken, strictRateLimiter, re
 router.get("/rooms/:roomId/participants/counts", participantCounts);
 router.post("/logs", authenticateToken, roomLogs);
 router.get("/logs/:roomId", authenticateToken, roomLogDetail);
+router.get("/rooms/:roomId/status", (req, res, next) => {
+  const roomId = req.params.roomId;
+  const rooms = getCollection("liveRooms");
+  rooms.findOne({ _id: new ObjectId(roomId) }).then(room => {
+    if (!room) {
+      return res.status(404).json({ status: "not_found" });
+    }
+    res.json({ status: room.status, roomId: room._id.toString() });
+  }).catch(next);
+});
 
 export default router;
