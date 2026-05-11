@@ -208,6 +208,16 @@ function createSlug(title: string): string {
   return `${base || "live-room"}-${randomUUID().slice(0, 8)}`;
 }
 
+function buildRoomCreateResponse(room: LiveRoomDocument, extras: Record<string, unknown> = {}) {
+  const sanitizedRoom = sanitizeLiveRoom(room);
+
+  return {
+    ...sanitizedRoom,
+    room: sanitizedRoom,
+    ...extras,
+  };
+}
+
 async function createLiveRoom(
   command: CreateLiveRoomCommand,
   hostUserId: ObjectId
@@ -255,9 +265,28 @@ async function createLiveRoom(
     });
   }
 
-  await joinLiveRoom(result.insertedId, hostUserId, normalizeText(command.displayName) || "Host", "host");
+  const scheduledStartAt = command.scheduledStartAt ? new Date(command.scheduledStartAt) : null;
+  const shouldStartNow = Boolean(scheduledStartAt && scheduledStartAt.getTime() <= now.getTime());
 
-  return sanitizeLiveRoom(room);
+  if (shouldStartNow) {
+    const displayName = normalizeText((command as CreateLiveRoomCommand & { displayName?: string }).displayName) || "Host";
+    const liveResult = await startLiveSession(result.insertedId, hostUserId, displayName);
+    return {
+      ...liveResult.room,
+      room: liveResult.room,
+      session: liveResult.session,
+      token: liveResult.token,
+      livekitUrl: liveResult.livekitUrl,
+      shouldRedirect: true,
+    };
+  }
+
+  return buildRoomCreateResponse(room, {
+    session: null,
+    token: null,
+    livekitUrl: null,
+    shouldRedirect: false,
+  });
 }
 
 async function searchLiveRooms(command: SearchLiveRoomsCommand, userId?: ObjectId) {

@@ -64,6 +64,14 @@ function getAuthedUserId(req: Request): ObjectId {
   return new ObjectId(user.sub);
 }
 
+function getOptionalAuthedUserId(req: Request): ObjectId | undefined {
+  try {
+    return getAuthedUserId(req);
+  } catch {
+    return undefined;
+  }
+}
+
 async function create(req: Request, res: Response, next: NextFunction) {
   try {
     const user = getAuthedUser(req);
@@ -78,7 +86,7 @@ async function create(req: Request, res: Response, next: NextFunction) {
 
 async function search(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = getAuthedUserId(req);
+    const userId = getOptionalAuthedUserId(req);
     const result = await searchLiveRooms(req.body || {}, userId);
     res.status(200).json(result);
   } catch (error) {
@@ -88,7 +96,8 @@ async function search(req: Request, res: Response, next: NextFunction) {
 
 async function detail(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await getLiveRoomDetail(req.body || {});
+    const userId = getOptionalAuthedUserId(req);
+    const result = await getLiveRoomDetail(req.body || {}, userId);
     res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -236,13 +245,8 @@ async function detailBySlug(req: Request, res: Response, next: NextFunction) {
     }
     
     // Try to get userId (optional - draft rooms only visible to host)
-    let userId: ObjectId | undefined;
-    try {
-      userId = getAuthedUserId(req);
-    } catch {
-      // User not logged in - will only see non-draft rooms
-    }
-    
+    const userId = getOptionalAuthedUserId(req);
+
     const result = await getLiveRoomDetail({ slug }, userId);
     res.status(200).json(result);
   } catch (error) {
